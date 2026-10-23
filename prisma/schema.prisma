@@ -1,0 +1,372 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String
+  avatar        String?
+  role          String    @default("ORGANIZER")
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  events        Event[]
+  comments      Comment[]
+  notifications Notification[]
+  memberships   CollaborationMembership[]
+}
+
+model Event {
+  id              String           @id @default(cuid())
+  title           String
+  description     String
+  eventType       String           // Wedding, Birthday, Corporate, College Fest, Anniversary, Cultural, etc.
+  location        String
+  venueName       String?
+  startDate       DateTime
+  endDate         DateTime?
+  guestCount      Int              @default(50)
+  budgetTotal     Float            @default(100000)
+  currency        String           @default("INR")
+  status          String           @default("PLANNING") // PLANNING, ACTIVE, COMPLETED, ARCHIVED
+  healthScore     Int              @default(85)
+  coverImage      String?
+  userId          String
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  preference      EventPreference?
+  budget          Budget?
+  tasks           Task[]
+  timelineItems   TimelineItem[]
+  vendors         Vendor[]
+  bookings        Booking[]
+  guests          Guest[]
+  seatingTables   SeatingTable[]
+  invitations     Invitation[]
+  checklists      Checklist[]
+  risks           Risk[]
+  comments        Comment[]
+  memberships     CollaborationMembership[]
+  aiConversations AIConversation[]
+  auditLogs       AuditLog[]
+}
+
+model EventPreference {
+  id                   String   @id @default(cuid())
+  eventId              String   @unique
+  event                Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  culturalTraditions   String?  // e.g., "Traditional Maharashtrian rituals, Haldi, Sangeet"
+  dietaryRestrictions String?  // e.g., "Strict vegetarian, Jain counter, nut-free"
+  accessibilityNeeds   String?  // e.g., "Wheelchair ramp, ground floor seating, sign interpreter"
+  sustainabilityGoals  String?  // e.g., "Zero single-use plastic, compostable cutlery, leftover food donation"
+  themeKeywords        String?  // e.g., "Royal Maratha, warm terracotta, floral marigold"
+  rainBackupPreference String?  // e.g., "Waterproof marquee canopy, indoor banquet hall reserved"
+  vibeStyle            String?  // e.g., "Regal, intimate, vibrant, eco-conscious"
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+}
+
+model Budget {
+  id                 String           @id @default(cuid())
+  eventId            String           @unique
+  event              Event            @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  totalBudget        Float
+  contingencyPercent Float            @default(10.0)
+  contingencyReserve Float            @default(0.0)
+  currency           String           @default("INR")
+  notes              String?
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+
+  categories         BudgetCategory[]
+}
+
+model BudgetCategory {
+  id              String    @id @default(cuid())
+  budgetId        String
+  budget          Budget    @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  name            String    // Venue, Catering, Decor & Florals, Photography & Video, Attire, Music & Lights, etc.
+  allocatedAmount Float
+  actualSpent     Float     @default(0.0)
+  icon            String?
+  color           String?
+  notes           String?
+
+  expenses        Expense[]
+}
+
+model Expense {
+  id            String         @id @default(cuid())
+  categoryId    String
+  category      BudgetCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  name          String
+  estimatedCost Float
+  actualCost    Float          @default(0.0)
+  paidAmount    Float          @default(0.0)
+  dueDate       DateTime?
+  paymentStatus String         @default("UNPAID") // UNPAID, PARTIAL, PAID
+  receiptUrl    String?
+  vendorId      String?
+  notes         String?
+  createdAt     DateTime       @default(now())
+}
+
+model Task {
+  id              String           @id @default(cuid())
+  eventId         String
+  event           Event            @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  title           String
+  description     String?
+  category        String           @default("GENERAL") // VENUE, CATERING, GUESTS, DECOR, MEDIA, LOGISTICS
+  status          String           @default("TODO") // TODO, IN_PROGRESS, COMPLETED, BLOCKED
+  priority        String           @default("MEDIUM") // LOW, MEDIUM, HIGH, URGENT
+  dueDate         DateTime?
+  assignedTo      String?
+  isCriticalPath  Boolean          @default(false)
+  order           Int              @default(0)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  dependencies    TaskDependency[] @relation("TaskDependencies")
+  dependedOnBy    TaskDependency[] @relation("TaskDependents")
+}
+
+model TaskDependency {
+  id                String @id @default(cuid())
+  taskId            String
+  task              Task   @relation("TaskDependencies", fields: [taskId], references: [id], onDelete: Cascade)
+  dependsOnTaskId   String
+  dependsOnTask     Task   @relation("TaskDependents", fields: [dependsOnTaskId], references: [id], onDelete: Cascade)
+  dependencyType    String @default("FINISH_TO_START")
+}
+
+model TimelineItem {
+  id           String   @id @default(cuid())
+  eventId      String
+  event        Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  timeSlot     String   // e.g. "09:00 AM - 10:30 AM" or "D-30 Days"
+  title        String
+  description  String?
+  location     String?
+  stage        String   @default("MORNING") // PRE_EVENT, MORNING, AFTERNOON, EVENING, POST_EVENT
+  assignedLead String?
+  isMilestone  Boolean  @default(false)
+  order        Int      @default(0)
+}
+
+model Vendor {
+  id          String        @id @default(cuid())
+  eventId     String
+  event       Event         @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  name        String
+  category    String        // Venue, Catering, Photography, Decor, Music, Makeup, Transport, Invitation
+  contactName String?
+  email       String?
+  phone       String?
+  website     String?
+  address     String?
+  rating      Float         @default(4.8)
+  status      String        @default("DISCOVERED") // DISCOVERED, CONTACTED, QUOTED, SHORTLISTED, BOOKED, DECLINED
+  notes       String?
+  createdAt   DateTime      @default(now())
+
+  quotes      VendorQuote[]
+  bookings    Booking[]
+}
+
+model VendorQuote {
+  id            String   @id @default(cuid())
+  vendorId      String
+  vendor        Vendor   @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  amount        Float
+  currency      String   @default("INR")
+  inclusions    String?  // JSON or text list of deliverables
+  quoteDate     DateTime @default(now())
+  validUntil    DateTime?
+  status        String   @default("RECEIVED") // RECEIVED, REVIEWING, ACCEPTED, REJECTED
+  attachmentUrl String?
+}
+
+model Booking {
+  id             String    @id @default(cuid())
+  eventId        String
+  event          Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  vendorId       String
+  vendor         Vendor    @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  depositPaid    Float     @default(0.0)
+  balanceDue     Float     @default(0.0)
+  contractStatus String    @default("DRAFTED") // DRAFTED, SIGNED, EXECUTED
+  bookedAt       DateTime  @default(now())
+  notes          String?
+}
+
+model Guest {
+  id                String        @id @default(cuid())
+  eventId           String
+  event             Event         @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  firstName         String
+  lastName          String
+  email             String?
+  phone             String?
+  household         String?
+  plusOneAllowed    Boolean       @default(false)
+  plusOneAttending  Boolean       @default(false)
+  dietary           String?       // "Vegetarian", "Jain", "Vegan", "Gluten-Free", "None"
+  accessibility     String?       // "Wheelchair", "Elderly seating", "None"
+  tableId           String?
+  table             SeatingTable? @relation(fields: [tableId], references: [id], onDelete: SetNull)
+  invitationSent    Boolean       @default(false)
+  notes             String?
+  createdAt         DateTime      @default(now())
+
+  rsvp              Rsvp?
+}
+
+model Rsvp {
+  id              String   @id @default(cuid())
+  guestId         String   @unique
+  guest           Guest    @relation(fields: [guestId], references: [id], onDelete: Cascade)
+  status          String   @default("PENDING") // PENDING, ACCEPTED, DECLINED, TENTATIVE
+  confirmedCount  Int      @default(1)
+  mealChoice      String?
+  specialRequests String?
+  respondedAt     DateTime?
+}
+
+model SeatingTable {
+  id          String   @id @default(cuid())
+  eventId     String
+  event       Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  tableName   String
+  tableNumber Int
+  capacity    Int      @default(8)
+  shape       String   @default("ROUND") // ROUND, RECTANGLE
+  zone        String   @default("MAIN_HALL") // MAIN_HALL, OUTDOOR, PATIO, VIP, FAMILY
+
+  guests      Guest[]
+}
+
+model Invitation {
+  id             String    @id @default(cuid())
+  eventId        String
+  event          Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  templateName   String    @default("Royal Elegance")
+  heading        String
+  messageContent String
+  designStyle    String    @default("TRADITIONAL_ROYAL")
+  dressCode      String?
+  rsvpDeadline   DateTime?
+  shareableLink  String?
+  createdAt      DateTime  @default(now())
+}
+
+model Checklist {
+  id          String    @id @default(cuid())
+  eventId     String
+  event       Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  title       String
+  category    String    @default("GENERAL")
+  isCompleted Boolean   @default(false)
+  dueDate     DateTime?
+}
+
+model Risk {
+  id               String            @id @default(cuid())
+  eventId          String
+  event            Event             @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  riskType         String            // WEATHER, BUDGET, VENDOR, ATTENDANCE, LOGISTICS
+  severity         String            @default("MEDIUM") // LOW, MEDIUM, HIGH, CRITICAL
+  likelihood       String            @default("MEDIUM") // LOW, MEDIUM, HIGH
+  description      String
+  impact           String
+  contingencyPlans ContingencyPlan[]
+}
+
+model ContingencyPlan {
+  id                String   @id @default(cuid())
+  riskId            String
+  risk              Risk     @relation(fields: [riskId], references: [id], onDelete: Cascade)
+  title             String
+  triggerCondition  String
+  actionSteps       String
+  alternativeVenue  String?
+  budgetImpact      Float    @default(0.0)
+  contacts          String?
+}
+
+model Comment {
+  id         String   @id @default(cuid())
+  eventId    String
+  event      Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  authorName String
+  authorRole String   @default("PLANNER")
+  content    String
+  createdAt  DateTime @default(now())
+}
+
+model CollaborationMembership {
+  id         String   @id @default(cuid())
+  eventId    String
+  event      Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  userEmail  String
+  userName   String
+  role       String   @default("CO_PLANNER") // OWNER, CO_PLANNER, VIEWER, VENDOR
+  invitedAt  DateTime @default(now())
+  status     String   @default("ACCEPTED") // PENDING, ACCEPTED
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  message   String
+  type      String   @default("INFO") // INFO, WARNING, SUCCESS, ALERT
+  isRead    Boolean  @default(false)
+  link      String?
+  createdAt DateTime @default(now())
+}
+
+model AIConversation {
+  id        String      @id @default(cuid())
+  eventId   String
+  event     Event       @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  title     String      @default("Planning Session")
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  messages  AIMessage[]
+}
+
+model AIMessage {
+  id             String         @id @default(cuid())
+  conversationId String
+  conversation   AIConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role           String         // "user", "assistant", "system"
+  content        String
+  reasoning      String?
+  metadataJson   String?        // Structured suggestions, action items, tags
+  createdAt      DateTime       @default(now())
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  eventId     String
+  event       Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  action      String   // TASK_COMPLETED, BUDGET_UPDATED, GUEST_ADDED, VENDOR_BOOKED, SCENARIO_APPLIED
+  performedBy String   // Name or User ID
+  details     String?  // JSON string or summary
+  createdAt   DateTime @default(now())
+}
